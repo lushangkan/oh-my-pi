@@ -1007,6 +1007,32 @@ searxng:
 
 Provider credentials and custom model definitions are configured separately — see [Providers](./providers.md) and [Models](./models.md).
 
+#### Live voice provider
+
+`live.provider` defaults to `openai-codex`, which uses the existing Codex OAuth
+sign-in and official Live endpoints. To use a Codex Live-compatible proxy such
+as CLIProxyAPI, select its provider id from `models.yml`:
+
+```yaml
+live:
+   provider: my-live-proxy
+   voice: sol
+```
+
+Configure `my-live-proxy` in `models.yml` with its API base URL (for example,
+`https://proxy.example/v1`) and its own API key. Command-backed keys and provider
+headers use the same resolution as ordinary model requests. Live posts to
+`<baseUrl>/live` and connects its control WebSocket to
+`<baseUrl>/live/<call_id>` using the same proxy credential and
+`OpenAI-Alpha: quicksilver=v2`. The proxy path prefix is preserved. Official
+Codex OAuth, account headers, and device attestation are not used on this path.
+
+The proxy must implement the Codex Live protocol, not just OpenAI-compatible
+chat or Responses APIs. Its WebRTC media addresses and UDP ports must also be
+reachable from the client. The provider selection is read when starting a call
+and applies to `/live`, RPC, and extension-owned WebRTC sessions.
+
+
 #### Saved reset auto-consumption
 
 `codexResets.autoRedeem` and `claudeResets.autoRedeem` independently control saved-reset consumption: `yes` enables automatic spending, `no` disables it, and `unset` requires consent before the first spend. A session with no prompt UI to ask (such as `omp -p`) spends a reset under `unset` only when that reset expires within 5 minutes and would otherwise be lost; everything else waits for consent, with a notice pointing at `/usage reset`.

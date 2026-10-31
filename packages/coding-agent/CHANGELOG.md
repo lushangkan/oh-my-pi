@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed Live voice ignoring configured proxy credentials and endpoints: `live.provider` now selects a Codex Live-compatible provider from `models.yml` for both signaling and the sideband WebSocket, without requiring an official Codex OAuth login.
+
 ## [18.14.1] - 2026-10-31
 
 ### Added

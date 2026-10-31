@@ -5,6 +5,9 @@
 import { register, type ScopeLike } from "../config/registry";
 import { DEFAULT_LIVE_VOICE, LIVE_VOICE_OPTIONS, LIVE_VOICE_VALUES } from "./voices";
 
+/** Provider whose endpoint implements the Codex Live protocol. */
+export const cfgLiveProvider = register({ id: "live.provider", type: "string", default: "openai-codex" });
+
 export const cfgLiveVoice = register({
 	id: "live.voice",
 	type: "enum",

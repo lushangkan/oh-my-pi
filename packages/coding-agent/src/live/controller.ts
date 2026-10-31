@@ -16,6 +16,7 @@ import {
 	type LiveServerEvent,
 } from "./protocol";
 import { OUTPUT_ACTIVE_LEVEL, OutputActivity } from "./output-activity";
+import { cfgLiveProvider } from "./settings";
 import { CodexLiveTransport } from "./transport";
 import type { LivePhase } from "@oh-my-pi/pi-tui/apps/live-visualizer";
 import { DEFAULT_LIVE_VOICE } from "./voices";
@@ -167,6 +168,17 @@ export class LiveSessionController {
 		return this.#transport?.sdpAnswer;
 	}
 
+	async #resolveProvider() {
+		const id = cfgLiveProvider.get(this.#session.settings).trim() || "openai-codex";
+		if (id === "openai-codex") return undefined;
+		const registry = this.#session.modelRegistry;
+		const baseUrl = registry.getProviderBaseUrl(id);
+		if (!baseUrl) throw new Error(`No base URL configured for live provider "${id}".`);
+		const apiKey = await registry.getApiKeyForProvider(id, this.#session.sessionId, { baseUrl });
+		if (!apiKey) throw new Error(`No API key available for live provider "${id}".`);
+		return { id, baseUrl, apiKey, headers: await registry.getProviderHeaders(id) };
+	}
+
 	/** Connects the realtime surface and starts microphone streaming (or, with `sdpOffer`, only signaling). */
 	async start(): Promise<void> {
 		if (this.#stopped) {
@@ -187,6 +199,7 @@ export class LiveSessionController {
 			const instructions = prompt.render(this.#instructionsTemplate, user);
 			const transport = new CodexLiveTransport({
 				authStorage: this.#session.modelRegistry.authStorage,
+				provider: await this.#resolveProvider(),
 				sessionId: this.#session.sessionId,
 				instructions,
 				voice: this.#voice,
