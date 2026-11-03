@@ -1020,6 +1020,46 @@ searxng:
 
 Provider credentials and custom model definitions are configured separately — see [Providers](./providers.md) and [Models](./models.md).
 
+#### Live voice provider
+
+`live.provider` defaults to `openai-codex`, which uses the existing Codex OAuth
+sign-in and official Live endpoints. To use a Codex Live-compatible proxy such
+as CLIProxyAPI, select its provider id from `models.yml`:
+
+```yaml
+live:
+   provider: my-live-proxy
+   voice: sol
+```
+
+Configure `my-live-proxy` in `models.yml` with its API base URL (for example,
+`https://proxy.example/v1`) and its own API key. Command-backed keys and provider
+headers use the same resolution as ordinary model requests. Live posts to
+`<baseUrl>/live` and connects its control WebSocket to
+`<baseUrl>/live/<call_id>` using the same proxy credential and
+`OpenAI-Alpha: quicksilver=v2`. The proxy path prefix is preserved. Official
+Codex OAuth, account headers, and device attestation are not used on this path.
+
+The proxy must implement the Codex Live protocol, not just OpenAI-compatible
+chat or Responses APIs. Its WebRTC media addresses and UDP ports must also be
+reachable from the client. The provider selection is read when starting a call
+and applies to `/live`, RPC, and extension-owned WebRTC sessions.
+
+For an existing provider named `cpa-openai`, select it with
+`omp config set live.provider cpa-openai`. Ordinary chat models are unaffected;
+Live still uses `gpt-live-1-codex`, with its voice selected by `live.voice`.
+A base URL without `/v1` is normalized to include it. A returned `Location`
+provides only the call ID and cannot redirect the control WebSocket to another host.
+
+When CLIProxyAPI enables `oauth.providers.codex.live-media-relay.enabled`, Docker
+deployments need a client-reachable `public-ip`, paired `udp-port-min` and
+`udp-port-max` settings, and matching UDP port mappings. If HTTP signaling returns
+`201` but media times out, check whether the SDP still advertises a Docker-internal
+address. See the [CLIProxyAPI configuration reference](https://help.router-for.me/configuration/options).
+
+Reopen OMP and enter `/live` or press `Ctrl+L` to start; press `Ctrl+L` again to end.
+To restore official sign-in, run `omp config set live.provider openai-codex`.
+
 #### Saved reset auto-consumption
 
 `codexResets.autoRedeem` and `claudeResets.autoRedeem` independently control saved-reset consumption: `yes` enables automatic spending, `no` disables it, and `unset` requires consent before the first spend. A session with no prompt UI to ask (such as `omp -p`) spends a reset under `unset` only when that reset expires within 5 minutes and would otherwise be lost; everything else waits for consent, with a notice pointing at `/usage reset`.
