@@ -2,7 +2,7 @@ import * as os from "node:os";
 import type { AgentMessage } from "@oh-my-pi/pi-agent-core";
 import type { AssistantMessage } from "@oh-my-pi/pi-ai";
 import { AudioCapture } from "@oh-my-pi/pi-natives";
-import { prompt } from "@oh-my-pi/pi-utils";
+import { prompt, toError } from "@oh-my-pi/pi-utils";
 import type { AgentSession } from "../session/agent-session";
 import type { AgentSessionEvent } from "../session/agent-session-events";
 import { LIVE_DELEGATION_MESSAGE_TYPE } from "../session/messages";
@@ -16,6 +16,7 @@ import {
 	type LiveServerEvent,
 } from "./protocol";
 import { OUTPUT_ACTIVE_LEVEL, OutputActivity } from "./output-activity";
+import { cfgLiveProvider } from "./settings";
 import { CodexLiveTransport } from "./transport";
 import type { LivePhase } from "@oh-my-pi/pi-tui/apps/live-visualizer";
 import { DEFAULT_LIVE_VOICE } from "./voices";
@@ -68,10 +69,6 @@ export interface LiveSessionControllerOptions {
 	 * phase is `muted`. Levels are not reported in this mode.
 	 */
 	sdpOffer?: string;
-}
-
-function errorFrom(cause: unknown): Error {
-	return cause instanceof Error ? cause : new Error(String(cause));
 }
 
 function clampLevel(level: number): number {
@@ -167,6 +164,17 @@ export class LiveSessionController {
 		return this.#transport?.sdpAnswer;
 	}
 
+	async #resolveProvider() {
+		const id = cfgLiveProvider.get(this.#session.settings).trim() || "openai-codex";
+		if (id === "openai-codex") return undefined;
+		const registry = this.#session.modelRegistry;
+		const baseUrl = registry.getProviderBaseUrl(id);
+		if (!baseUrl) throw new Error(`No base URL configured for live provider "${id}".`);
+		const apiKey = await registry.getApiKeyForProvider(id, this.#session.sessionId, { baseUrl });
+		if (!apiKey) throw new Error(`No API key available for live provider "${id}".`);
+		return { id, baseUrl, apiKey, headers: await registry.getProviderHeaders(id) };
+	}
+
 	/** Connects the realtime surface and starts microphone streaming (or, with `sdpOffer`, only signaling). */
 	async start(): Promise<void> {
 		if (this.#stopped) {
@@ -187,6 +195,7 @@ export class LiveSessionController {
 			const instructions = prompt.render(this.#instructionsTemplate, user);
 			const transport = new CodexLiveTransport({
 				authStorage: this.#session.modelRegistry.authStorage,
+				provider: await this.#resolveProvider(),
 				sessionId: this.#session.sessionId,
 				instructions,
 				voice: this.#voice,
@@ -230,7 +239,7 @@ export class LiveSessionController {
 			this.#recorder = recorder;
 			this.#refreshAudioPhase();
 		} catch (cause) {
-			const error = errorFrom(cause);
+			const error = toError(cause);
 			this.#reportFailure(error);
 			await this.stop();
 			throw error;
@@ -249,7 +258,7 @@ export class LiveSessionController {
 		this.#refreshAudioPhase();
 		const transport = this.#transport;
 		if (transport) {
-			void transport.setMuted(this.#muted).catch(cause => this.#reportFailure(errorFrom(cause)));
+			void transport.setMuted(this.#muted).catch(cause => this.#reportFailure(toError(cause)));
 		}
 	}
 
@@ -272,7 +281,7 @@ export class LiveSessionController {
 			try {
 				recorder.stop();
 			} catch (cause) {
-				cleanupError = errorFrom(cause);
+				cleanupError = toError(cause);
 			}
 		}
 
@@ -283,12 +292,12 @@ export class LiveSessionController {
 			try {
 				await transport.send(buildSessionClose());
 			} catch (cause) {
-				cleanupError ??= errorFrom(cause);
+				cleanupError ??= toError(cause);
 			}
 			try {
 				await transport.close();
 			} catch (cause) {
-				cleanupError ??= errorFrom(cause);
+				cleanupError ??= toError(cause);
 			}
 		}
 
@@ -301,7 +310,7 @@ export class LiveSessionController {
 		try {
 			handler();
 		} catch (cause) {
-			this.#reportFailure(errorFrom(cause));
+			this.#reportFailure(toError(cause));
 		}
 	}
 
@@ -353,7 +362,7 @@ export class LiveSessionController {
 				},
 				{ triggerTurn: true },
 			)
-			.catch(cause => this.#reportFailure(errorFrom(cause)));
+			.catch(cause => this.#reportFailure(toError(cause)));
 	}
 
 	#handleSessionEvent(event: AgentSessionEvent): void {
@@ -411,7 +420,7 @@ export class LiveSessionController {
 		try {
 			this.#transport.pushAudio(samples);
 		} catch (cause) {
-			this.#reportFailure(errorFrom(cause));
+			this.#reportFailure(toError(cause));
 		}
 	}
 
@@ -488,7 +497,7 @@ export class LiveSessionController {
 			.then(async () => {
 				if (!this.#stopped) await transport.send(message);
 			})
-			.catch(cause => this.#reportFailure(errorFrom(cause)));
+			.catch(cause => this.#reportFailure(toError(cause)));
 	}
 
 	#refreshAudioPhase(): void {
@@ -510,7 +519,7 @@ export class LiveSessionController {
 		try {
 			this.#callbacks.onPhase(phase);
 		} catch (cause) {
-			this.#reportFailure(errorFrom(cause));
+			this.#reportFailure(toError(cause));
 		}
 	}
 
@@ -532,7 +541,7 @@ export class LiveSessionController {
 			this.#emittedInputLevel = input;
 			this.#emittedOutputLevel = output;
 		} catch (cause) {
-			this.#reportFailure(errorFrom(cause));
+			this.#reportFailure(toError(cause));
 		}
 	}
 
@@ -541,7 +550,7 @@ export class LiveSessionController {
 		try {
 			this.#callbacks.onTranscript(transcript);
 		} catch (cause) {
-			this.#reportFailure(errorFrom(cause));
+			this.#reportFailure(toError(cause));
 		}
 	}
 

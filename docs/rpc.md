@@ -1470,6 +1470,10 @@ RPC session as ordinary turns, so delegated work runs with the session's model
 and any host tools registered through `set_host_tools`. At most one live
 session runs per RPC server.
 
+`live.provider` selects the Live backend for both `live_start` and `live_connect`.
+It defaults to the official Codex OAuth backend. See
+[Live voice provider](./settings.md#live-voice-provider) for proxy setup.
+
 ### Commands
 
 - `{ id?, type: "live_start", voice?: string, instructions?: string }` → `data: { voice: string }`
